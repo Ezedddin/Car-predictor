@@ -25,6 +25,7 @@ import requests
 from bs4 import BeautifulSoup
 
 import config
+from estimate_new_prices import estimate
 
 log = logging.getLogger("autoscout24")
 
@@ -109,7 +110,7 @@ def is_lease_price(price):
     return any(marker in text for marker in ("p/m", "/mnd", "per maand", "/maand", "lease", "p.m."))
 
 
-def parse_listing(listing, brand, search_year):
+def parse_listing(listing, brand, search_year, body_type):
     """Convert one raw listing into a CSV row. Returns None if the listing is not usable."""
     vehicle = listing.get("vehicle") or {}
     price = listing.get("price") or {}
@@ -127,6 +128,7 @@ def parse_listing(listing, brand, search_year):
         mileage = parse_int(vehicle.get("mileageInKm"))
 
     model = (vehicle.get("model") or vehicle.get("modelGroup") or "").strip()
+    new_price = parse_int(price.get("suggestedRetailPrice"))
 
     return {
         "brand": brand,
@@ -136,6 +138,10 @@ def parse_listing(listing, brand, search_year):
         "fuel_type": normalize_fuel(listing),
         "price_eur": price_eur,
         "transmission": normalize_transmission(vehicle.get("transmission")),
+        "body_type": body_type,
+        # Original list price when new (same value as the RDW catalogusprijs); often missing
+        "new_price_eur": new_price or "",
+        "new_price_source": "autoscout" if new_price else "",
     }
 
 
@@ -149,6 +155,14 @@ class Storage:
         if not config.CSV_PATH.exists() or config.CSV_PATH.stat().st_size == 0:
             with open(config.CSV_PATH, "w", newline="", encoding="utf-8") as f:
                 csv.writer(f).writerow(config.CSV_COLUMNS)
+        with open(config.CSV_PATH, newline="", encoding="utf-8") as f:
+            header = next(csv.reader(f), [])
+        if header != config.CSV_COLUMNS:
+            # Never append rows with a different layout to an existing dataset
+            sys.exit(
+                f"{config.CSV_PATH} heeft andere kolommen ({','.join(header)}) dan verwacht "
+                f"({','.join(config.CSV_COLUMNS)}). Verplaats de bestanden in data/ en start opnieuw."
+            )
         self.seen_ids = self._read_lines(config.SEEN_IDS_PATH)
         self.done = self._read_lines(config.PROGRESS_PATH)
 
@@ -257,20 +271,20 @@ def parse_page(html):
     return props.get("listings") or [], props.get("numberOfPages") or 0, props.get("numberOfResults") or 0
 
 
-def scrape_brand_year(client, storage, brand, slug, year):
-    log.info("[START] %s - %d", brand, year)
+def scrape_body_type(client, brand, slug, year, body_value, body_type, rows, urls):
+    """Walk all result pages for one brand/year/body type and add the cars to rows."""
     url = config.SEARCH_URL.format(slug=slug)
-    rows = {}
+    label = f"{brand} {year} {body_type}"
     page = 1
     total_pages = None
 
     while page <= config.MAX_PAGES:
-        params = dict(config.SEARCH_PARAMS,
-                      fregfrom=year, fregto=year, pricefrom=config.MIN_PRICE, page=page)
+        params = dict(config.SEARCH_PARAMS, fregfrom=year, fregto=year,
+                      pricefrom=config.MIN_PRICE, body=body_value, page=page)
         try:
             html = client.get(url, params)
             if html is None:
-                log.error("%s %d - page %d - overgeslagen (geen geldige response)", brand, year, page)
+                log.error("%s - page %d - overgeslagen (geen geldige response)", label, page)
                 page += 1
                 if total_pages is None:
                     break
@@ -279,7 +293,7 @@ def scrape_brand_year(client, storage, brand, slug, year):
         except (BlockedError, PermissionError):
             raise
         except Exception as exc:
-            log.error("%s %d - page %d - fout: %s", brand, year, page, exc)
+            log.error("%s - page %d - fout: %s", label, page, exc)
             page += 1
             if total_pages is None:
                 break
@@ -287,7 +301,9 @@ def scrape_brand_year(client, storage, brand, slug, year):
 
         if total_pages is None:
             total_pages = n_pages
-            log.info("%s %d - %d resultaten op %d pagina's", brand, year, n_results, n_pages)
+            if n_results == 0:
+                break
+            log.info("%s - %d resultaten op %d pagina's", label, n_results, n_pages)
 
         page_rows = 0
         for listing in listings:
@@ -297,18 +313,99 @@ def scrape_brand_year(client, storage, brand, slug, year):
                     continue
                 if str((listing.get("vehicle") or {}).get("make") or "").lower() != brand.lower():
                     continue  # e.g. sponsored listings of another brand
-                row = parse_listing(listing, brand, year)
+                row = parse_listing(listing, brand, year, body_type)
                 if row is not None:
                     rows[listing_id] = row
+                    urls[listing_id] = listing.get("url")
                     page_rows += 1
             except Exception as exc:
-                log.warning("%s %d - page %d - listing overgeslagen: %s", brand, year, page, exc)
+                log.warning("%s - page %d - listing overgeslagen: %s", label, page, exc)
 
-        log.info("%s %d - page %d - %d cars found", brand, year, page, page_rows)
+        log.info("%s - page %d - %d cars found", label, page, page_rows)
 
         if not listings or page >= (total_pages or 0):
             break
         page += 1
+
+
+def parse_plate(html):
+    """License plate from a listing page, normalized to RDW format (e.g. "1ZLR58")."""
+    soup = BeautifulSoup(html, "html.parser")
+    script = soup.find("script", id="__NEXT_DATA__")
+    if script is None or not script.string:
+        return None
+    details = json.loads(script.string)["props"]["pageProps"].get("listingDetails") or {}
+    plate = re.sub(r"[^A-Z0-9]", "", str((details.get("vehicle") or {}).get("licensePlate") or "").upper())
+    return plate if len(plate) == 6 else None
+
+
+def rdw_catalog_prices(plates):
+    """Look up the catalogusprijs at RDW open data. Returns {plate: price}."""
+    plates = sorted(plates)
+    prices = {}
+    for start in range(0, len(plates), config.RDW_BATCH_SIZE):
+        batch = plates[start:start + config.RDW_BATCH_SIZE]
+        params = {
+            "$select": "kenteken,catalogusprijs",
+            "$where": "kenteken in(" + ",".join(f"'{p}'" for p in batch) + ")",
+        }
+        for attempt in range(1, config.MAX_RETRIES + 1):
+            try:
+                resp = requests.get(config.RDW_URL, params=params, timeout=config.REQUEST_TIMEOUT)
+                resp.raise_for_status()
+                for item in resp.json():
+                    price = parse_int(item.get("catalogusprijs"))
+                    if price:
+                        prices[item["kenteken"]] = price
+                break
+            except Exception as exc:
+                log.warning("RDW-fout (poging %d/%d): %s", attempt, config.MAX_RETRIES, exc)
+                time.sleep(10 * attempt)
+        time.sleep(1)
+    return prices
+
+
+def fill_missing_new_prices(client, storage, brand, year, rows, urls):
+    """Fill new_price_eur via license plate + RDW for new cars that don't have it yet."""
+    missing = [i for i, r in rows.items() if not r["new_price_eur"] and i not in storage.seen_ids]
+    if not missing:
+        return
+    log.info("%s %d - nieuwprijs ophalen via kenteken voor %d auto's", brand, year, len(missing))
+
+    plates = {}
+    for n, listing_id in enumerate(missing, 1):
+        try:
+            html = client.get(config.BASE_URL + urls[listing_id], None)
+            plate = parse_plate(html) if html else None
+            if plate:
+                plates[listing_id] = plate
+        except (BlockedError, PermissionError):
+            raise
+        except Exception as exc:
+            log.warning("%s %d - kenteken overgeslagen: %s", brand, year, exc)
+        if n % 20 == 0 or n == len(missing):
+            log.info("%s %d - advertenties %d/%d bekeken", brand, year, n, len(missing))
+
+    prices = rdw_catalog_prices(set(plates.values()))
+    found = 0
+    for listing_id, plate in plates.items():
+        if plate in prices:
+            rows[listing_id]["new_price_eur"] = prices[plate]
+            rows[listing_id]["new_price_source"] = "rdw_kenteken"
+            found += 1
+    log.info("%s %d - kenteken gevonden voor %d/%d, nieuwprijs via RDW voor %d/%d auto's",
+             brand, year, len(plates), len(missing), found, len(missing))
+
+
+def scrape_brand_year(client, storage, brand, slug, year):
+    log.info("[START] %s - %d", brand, year)
+    rows = {}
+    urls = {}
+    for body_value, body_type in config.BODY_TYPES.items():
+        scrape_body_type(client, brand, slug, year, body_value, body_type, rows, urls)
+
+    if config.FETCH_MISSING_NEW_PRICE:
+        fill_missing_new_prices(client, storage, brand, year, rows, urls)
 
     saved = storage.save(rows)
     log.info("[DONE] %s - %d - %d cars saved (%d gevonden, %d al aanwezig)",
@@ -337,6 +434,7 @@ def main():
     storage = Storage()
     client = Client()
     total = 0
+    completed = False
 
     try:
         for brand, slug in brands.items():
@@ -347,6 +445,7 @@ def main():
                     continue
                 total += scrape_brand_year(client, storage, brand, slug, year)
                 storage.mark_done(key)
+        completed = True
     except BlockedError as exc:
         log.error("Toegang geweigerd door AutoScout24 (%s). Scraper stopt; probeer later opnieuw.", exc)
     except PermissionError as exc:
@@ -356,6 +455,9 @@ def main():
 
     log.info("Klaar. %d nieuwe auto's opgeslagen in %s (totaal %d listings).",
              total, config.CSV_PATH, len(storage.seen_ids))
+
+    if completed and config.FETCH_MISSING_NEW_PRICE:
+        estimate()
 
 
 if __name__ == "__main__":

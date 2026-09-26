@@ -31,14 +31,16 @@ BMW 2015 - page 2 - 20 cars found
 ```
 
 Een volledige run doet enkele duizenden requests met 3–6 seconden pauze ertussen en duurt daardoor
-ongeveer **6–10 uur**. Je kunt hem altijd onderbreken (Ctrl+C) en later opnieuw starten.
+ongeveer **4–5 dagen**, omdat voor veel auto's de advertentiepagina geopend wordt om het kenteken te vinden. Je kunt hem altijd onderbreken (Ctrl+C) en later opnieuw starten.
 
 ## Hoe het werkt
 
 - Zoek-URL: `https://www.autoscout24.nl/lst/<merk>?fregfrom=<jaar>&fregto=<jaar>&pricefrom=2000&cy=NL&atype=C&page=<n>`
 - AutoScout24 zet alle zoekresultaten als JSON in `<script id="__NEXT_DATA__">`, dus
   `requests` + `BeautifulSoup` is voldoende (geen Playwright nodig).
-- Per merk → per bouwjaar → alle pagina's tot `numberOfPages` (of tot een lege pagina).
+- Per merk → per bouwjaar → per carrosserievorm → alle pagina's tot `numberOfPages` (of tot een lege pagina).
+  De carrosserievorm staat niet in de gegevens per auto, daarom zoeken we per vorm apart (filter `body`).
+  Samen dekken de vormen alle advertenties (gecontroleerd: BMW 2015, 643 = 643).
 - Filters: bouwjaar min = max = geselecteerd jaar, prijs vanaf €2.000, alleen personenauto's in NL,
   `pricetype=public` (koopprijs). Listings met een maand-/leaseprijs of een prijs onder €2.000 worden overgeslagen.
 - Instellingen (merken, jaren, delay, filters) staan in `config.py`.
@@ -47,7 +49,7 @@ ongeveer **6–10 uur**. Je kunt hem altijd onderbreken (Ctrl+C) en later opnieu
 
 | Bestand | Inhoud |
 |---|---|
-| `data/cars.csv` | De dataset: `brand,model,mileage_km,year,fuel_type,price_eur,transmission` |
+| `data/cars.csv` | De dataset: `brand,model,mileage_km,year,fuel_type,price_eur,transmission,body_type,new_price_eur,new_price_source` |
 | `data/seen_ids.txt` | AutoScout24 listing-ID's die al in `cars.csv` staan |
 | `data/progress.txt` | Merk/jaar-combinaties die volledig afgerond zijn |
 
@@ -62,7 +64,19 @@ ongeveer **6–10 uur**. Je kunt hem altijd onderbreken (Ctrl+C) en later opnieu
 - `fuel_type`: `petrol`, `diesel`, `electric`, `hybrid`, `lpg`, `other`.
   AutoScout24's "Elektro/Benzine" and "Elektro/Diesel" are both stored as `hybrid`.
 - `transmission`: `manual`, `automatic` (inclusief semi-automaat), `other`.
-- `mileage_km`, `price_eur`, `year`: gehele getallen. Een ontbrekende kilometerstand blijft leeg.
+- `body_type`: `hatchback`, `convertible`, `coupe`, `suv` (incl. off-road/pick-up), `station_wagon`, `sedan`, `mpv`, `van`, `other`.
+- `new_price_eur`: de oorspronkelijke nieuwprijs (catalogusprijs). Zo wordt hij gevonden:
+  1. AutoScout24 geeft hem mee in de zoekresultaten (~45% van de auto's). Dit is dezelfde waarde als de RDW-catalogusprijs.
+  2. Anders opent de scraper de advertentiepagina, leest het kenteken en zoekt de catalogusprijs op bij
+     [RDW open data](https://opendata.rdw.nl/resource/m9d7-ebf2.json). Het kenteken wordt **niet** opgeslagen.
+     Niet elke verkoper vult een kenteken in.
+  3. Na een volledige run schat `estimate_new_prices.py` de rest: mediaan van dezelfde merk + model + bouwjaar
+     in de dataset, anders de RDW-mediaan voor merk + model + bouwjaar, anders merk + model over alle jaren.
+- `new_price_source`: `autoscout`, `rdw_kenteken` (allebei exact) of `schatting`.
+
+Na een onderbroken run kun je de schatting los draaien met `python estimate_new_prices.py`.
+Eerdere schattingen worden dan opnieuw berekend. Wil je geen advertentiepagina's openen (veel sneller),
+zet dan `FETCH_MISSING_NEW_PRICE = False` in `config.py`.
 
 ## Grenzen en fair use
 
