@@ -1,0 +1,25 @@
+Volkswagen|ID. Polo
+Toyota|C-HR+
+Volkswagen|ID. Cross
+Volvo|ES90
+Volvo|EX60
+Mercedes-Benz|SL Roadster AMG
+Porsche|718 Cayman
+Audi|A2 e-tron
+Audi|SQ6 e-tron
+Opel|Movano-e
+Audi|S6 e-tron
+Mercedes-Benz|GL 420
+Peugeot|e-Traveller
+Ford|F 350
+Audi|S e-tron GT
+Mercedes-Benz|Actros
+Mercedes-Benz|Maybach GLS
+Toyota|Alphard
+Ford|Nugget
+Mercedes-Benz|400
+Mercedes-Benz|CL 200
+Toyota|Harrier
+Ford|Freestar
+Ford|F Super Duty
+Ford|Customline

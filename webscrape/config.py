@@ -78,3 +78,36 @@ SEEN_IDS_PATH = DATA_DIR / "seen_ids.txt"
 PROGRESS_PATH = DATA_DIR / "progress.txt"
 
 CSV_COLUMNS = ["brand", "model", "mileage_km", "year", "fuel_type", "price_eur", "transmission", "body_type", "new_price_eur", "new_price_source"]
+
+# ---------------------------------------------------------------------------
+# Wayback Machine (wayback_scraper.py): historical listings 2020-2025
+# ---------------------------------------------------------------------------
+
+WAYBACK_CDX_URL = "https://web.archive.org/cdx/search/cdx"
+# "id_" returns the original archived page without the Wayback toolbar
+WAYBACK_PAGE_URL = "https://web.archive.org/web/{timestamp}id_/{url}"
+# First month (yyyymm). Before 03-2023 the archived pages show German/Belgian cars, which the
+# model doesn't use; set to "202001" to also collect those.
+WAYBACK_FROM = "202303"
+WAYBACK_YEAR_END = 2025
+# Archived model pages are the default search page: page 1 (~20 listings), no country filter.
+# Until early 2023 that page shows mostly German/Belgian cars, hence the country column.
+WAYBACK_LISTING_URL = "https://www.autoscout24.nl/lst/{brand_slug}/{model_slug}"
+# Some captures are empty (listings loaded via JavaScript); try a few per month
+WAYBACK_TRIES_PER_MONTH = 3
+
+# archive.org is a free service: keep the delay generous
+WAYBACK_DELAY_MIN = 1.0
+WAYBACK_DELAY_MAX = 2.0
+WAYBACK_TIMEOUT = 60
+WAYBACK_MAX_RETRIES = 5
+
+WAYBACK_CSV_PATH = DATA_DIR / "wayback_cars.csv"
+WAYBACK_SEEN_IDS_PATH = DATA_DIR / "wayback_seen_ids.txt"
+# brand|model|yyyymm combinations that are done
+WAYBACK_PROGRESS_PATH = DATA_DIR / "wayback_progress.txt"
+# brand|model combinations without any archived page
+WAYBACK_MISSING_PATH = DATA_DIR / "wayback_missing_models.txt"
+
+# page_sort: sort order of the archived page ("price" = cheapest first, "standard" = AutoScout24 default)
+WAYBACK_CSV_COLUMNS = ["snapshot_date", "country", "page_sort"] + CSV_COLUMNS

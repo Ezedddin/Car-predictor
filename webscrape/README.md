@@ -85,3 +85,41 @@ zet dan `FETCH_MISSING_NEW_PRICE = False` in `config.py`.
   Er zit geen CAPTCHA-bypass, proxy-rotatie of andere manier in om blokkades te omzeilen.
 - De gebruiksvoorwaarden van AutoScout24 beperken geautomatiseerd verzamelen van data. Gebruik de
   data alleen voor persoonlijk of studiegebruik en houd de delay in `config.py` ruim.
+
+## Historische data via de Wayback Machine (2020–2025)
+
+`cars.csv` bevat alleen advertenties uit 2026. Voor een tijdreeks haalt `wayback_scraper.py` de
+gearchiveerde modelpagina's van AutoScout24 op bij [web.archive.org](https://web.archive.org):
+
+```bash
+python wayback_scraper.py                                  # alle merk+model-combinaties uit cars.csv
+python wayback_scraper.py --brand Volkswagen --model Golf  # één model (test)
+python wayback_scraper.py --rescan                         # ook afgeronde maanden opnieuw
+```
+
+- Per merk + model uit `cars.csv` wordt `https://www.autoscout24.nl/lst/<merk>/<model>` opgezocht in
+  de CDX-index van archive.org (slug: `C 200` → `c-200`, `RAV4` → `rav-4`). Per maand vanaf `WAYBACK_FROM`
+  (standaard maart 2023, zie hieronder) t/m 2025 wordt één snapshot gelezen; is die leeg, dan worden tot 3 andere snapshots uit die maand geprobeerd.
+- Een snapshot is pagina 1 van de standaard zoekpagina: **~20 auto's per model per maand**.
+- Elke auto wordt één keer opgeslagen (de eerste maand waarin hij voorkomt).
+- Een volledige run vanaf maart 2023 is ~674 modellen × ~34 maanden: ongeveer **een halve tot een hele dag**
+  (vanaf 2020 ongeveer het dubbele).
+  Onderbreken (Ctrl+C) en herstarten kan; afgeronde maanden worden overgeslagen.
+
+| Bestand | Inhoud |
+|---|---|
+| `data/wayback_cars.csv` | `snapshot_date,country,page_sort` + dezelfde kolommen als `cars.csv` |
+| `data/wayback_seen_ids.txt` | Listing-ID's die al opgeslagen zijn |
+| `data/wayback_progress.txt` | Afgeronde `merk\|model\|jjjjmm`-combinaties |
+| `data/wayback_missing_models.txt` | Modellen zonder gearchiveerde pagina |
+
+**Let op bij het gebruiken van deze data**
+
+- `country`: de gearchiveerde URL's hebben geen landfilter. Tot en met **feb 2023** staan er vrijwel
+  alleen Duitse/Belgische (en wat Spaanse) auto's op (daarom begint `WAYBACK_FROM` standaard bij `202303`); vanaf **mrt 2023** alleen Nederlandse. Duitse
+  prijzen zijn lager (geen BPM), dus filter op `country == "NL"` of gebruik land als feature.
+- `page_sort`: tot ~apr 2022 (oude HTML-site) toonde de pagina de **goedkoopste** auto's eerst
+  (`price`); daarna de standaardsortering van AutoScout24 (`standard`). De periode met `price` is dus
+  sterk naar goedkope auto's vertekend en niet direct vergelijkbaar met de rest.
+- `body_type` is alleen bekend voor snapshots uit 2022–begin 2023; `new_price_eur` vrijwel nooit
+  (draai eventueel `estimate_new_prices.py`-achtige logica op deze data).
