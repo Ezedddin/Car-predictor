@@ -1,0 +1,21 @@
+{
+  "t_nu":43.1668856767,
+  "features":[
+    "brand_model",
+    "brand",
+    "fuel_type",
+    "transmission",
+    "age",
+    "mileage_km",
+    "new_price_2026",
+    "t",
+    "geschat"
+  ],
+  "categorisch":[
+    "brand_model",
+    "brand",
+    "fuel_type",
+    "transmission"
+  ],
+  "time_series_model":"ETS gedempte trend"
+}
