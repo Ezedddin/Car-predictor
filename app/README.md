@@ -14,7 +14,15 @@ Draai dat notebook dus eerst als die ontbreken.
 
 ## Starten
 
-Twee terminals, allebei vanuit de hoofdmap van het project.
+**Snel (één server).** Als `app/frontend/dist` bestaat (`npm run build` in `app/frontend`), serveert de API ook de frontend:
+
+```bash
+python -m uvicorn main:app --app-dir app/api --port 8000
+```
+
+Open <http://localhost:8000>.
+
+**Ontwikkelen (met hot reload).** Twee terminals, allebei vanuit de hoofdmap van het project.
 
 **1. API** (poort 8000)
 

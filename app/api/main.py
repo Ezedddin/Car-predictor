@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 from catboost import CatBoostRegressor
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 MODEL_DIR = Path(__file__).resolve().parents[2] / "model-building"
@@ -52,6 +53,26 @@ NIEUWPRIJS = [
 ]
 # Meest voorkomende brandstof en transmissie per model, als standaardkeuze in het formulier
 STANDAARD = data.groupby("brand_model")[["fuel_type", "transmission"]].agg(lambda s: s.mode().iloc[0])
+
+# Advertenties van nu (nieuwste AutoScout24-snapshot), om de prijs van nu te ijken aan wat er echt gevraagd wordt.
+# Per advertentie: vraagprijs gedeeld door wat het model voor precies die auto voorspelt.
+huidig = pd.read_parquet(MODEL_DIR / "dataset_tijd.parquet", filters=[("snapshot_date", "==", laatste)])
+huidig["t"] = T_NU
+huidig["geschat"] = huidig["new_price_source"].str.startswith("schatting").astype(int)
+huidig["verhouding"] = huidig["price_2026"] / np.exp(model.predict(huidig[FEATURES]))
+MIN_VERGELIJKBAAR = 5
+MAX_CORRECTIE = 0.2   # het model hooguit 20% bijstellen
+
+
+def vergelijkbare(brand_model, bouwjaar, brandstof, transmissie):
+    """Advertenties van nu voor hetzelfde model en bouwjaar, zo specifiek als de data toelaat."""
+    basis = huidig[(huidig["brand_model"] == brand_model) & (huidig["year"] == bouwjaar)]
+    for groep in (basis[(basis["fuel_type"] == brandstof) & (basis["transmission"] == transmissie)],
+                  basis[basis["fuel_type"] == brandstof],
+                  basis):
+        if len(groep) >= MIN_VERGELIJKBAAR:
+            return groep
+    return basis.iloc[:0]
 
 app = FastAPI(title="Auto-Voorspeller API")
 
@@ -136,9 +157,15 @@ def voorspel(auto: Auto):
         "mileage_km": km,
         "new_price_2026": nieuwprijs_2026,
         "t": T_NU + maanden,
-        "geschat": 1,   # afgeleid uit vergelijkbare auto's, net als bij de Wayback-data
+        "geschat": 0,   # mediaan van exacte nieuwprijzen, net als bij de advertenties waarmee we ijken
     })[FEATURES]
     prijs = np.exp(model.predict(toekomst))
+
+    # IJken: zit het model voor vergelijkbare advertenties van nu structureel te hoog of te laag, dan schuift de
+    # hele lijn mee. Het waardeverloop (de vorm van de lijn) blijft van het model.
+    groep = vergelijkbare(brand_model, auto.bouwjaar, auto.brandstof, auto.transmissie)
+    correctie = float(np.clip(groep["verhouding"].median(), 1 - MAX_CORRECTIE, 1 + MAX_CORRECTIE)) if len(groep) else 1.0
+    prijs *= correctie
 
     punten = []
     for i, m in enumerate(maanden):
@@ -158,5 +185,18 @@ def voorspel(auto: Auto):
         "leeftijd": round(leeftijd, 1),
         "nieuwprijs": round(nieuwprijs, -2),
         "bekend_model": auto.model in MODELLEN[auto.merk],
+        "vergelijkbaar": None if groep.empty else {
+            "aantal": len(groep),
+            "mediaan_prijs": round(float(groep["price_eur"].median()), -1),
+            "mediaan_km": int(round(groep["mileage_km"].median(), -3)),
+            "correctie": round(correctie - 1, 3),
+        },
         "euro_van": "dat jaar" if auto.inflatie > 0 else str(laatste.year),
     }
+
+
+# De gebouwde frontend (npm run build in app/frontend) op dezelfde server, zodat één server genoeg is.
+# Staat onderaan, zodat de /api-routes voorgaan.
+DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+if DIST.exists():
+    app.mount("/", StaticFiles(directory=DIST, html=True), name="frontend")

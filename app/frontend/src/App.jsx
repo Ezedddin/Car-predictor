@@ -54,7 +54,7 @@ export default function App() {
     api('/api/opties').then((o) => {
       setOpties(o)
       setForm((f) => ({ ...f, verkoop: plusMaanden(o.nu, 12) }))
-    }).catch(() => setFout('Kan de API niet bereiken. Draait de server (app/api)?'))
+    }).catch(() => setFout('Geen verbinding met de server (app/api).'))
   }, [])
 
   const verkoopMaanden = opties && form.verkoop ? maandenTussen(opties.nu, form.verkoop) : 12
@@ -99,9 +99,10 @@ export default function App() {
         transmissie: form.transmissie,
         inflatie: Number(form.inflatie) / 100,
       }
-      setResultaat(await api('/api/voorspel', {
+      const r = await api('/api/voorspel', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      }))
+      })
+      setResultaat({ ...r, auto: { ...form } })
     } catch (err) {
       setFout(err.message)
     } finally {
@@ -115,150 +116,159 @@ export default function App() {
     : []
 
   return (
-    <div className="pagina">
-      <header>
-        <h1>Auto-Voorspeller</h1>
-        <p>Wat is jouw auto waard op het moment dat je hem wilt verkopen?</p>
+    <>
+      <header className="balk">
+        <div className="balk-inhoud">
+          <span className="logo" aria-hidden="true" />
+          <span className="naam">Auto-Voorspeller</span>
+          <span className="balk-sub">restwaarde van je occasion</span>
+        </div>
       </header>
 
-      <main>
-        <form className="kaart" onSubmit={voorspel}>
-          <h2>Jouw auto</h2>
+      <div className="pagina">
+        <form className="paneel" onSubmit={voorspel}>
+          <fieldset>
+            <legend>Auto</legend>
+            <div className="rij">
+              <label>Merk
+                <select value={form.merk} onChange={kiesMerk} disabled={!opties}>
+                  {opties && Object.keys(opties.modellen).sort().map((m) => <option key={m}>{m}</option>)}
+                </select>
+              </label>
+              <label>Model
+                <select value={form.model} onChange={zet('model')} disabled={!opties}>
+                  {modellen.map((m) => <option key={m}>{m}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="rij">
+              <label>Bouwjaar
+                <select value={form.bouwjaar} onChange={zet('bouwjaar')} disabled={!opties}>
+                  {bouwjaren.map((j) => <option key={j}>{j}</option>)}
+                </select>
+              </label>
+              <label>Brandstof
+                <select value={form.brandstof} onChange={zet('brandstof')}>
+                  {Object.entries(BRANDSTOF).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="rij">
+              <label>Transmissie
+                <select value={form.transmissie} onChange={zet('transmissie')}>
+                  {Object.entries(TRANSMISSIE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </label>
+              <label>Km-stand nu
+                <input type="number" min="0" max="600000" step="1000" value={form.km} onChange={zet('km')} required />
+              </label>
+            </div>
+          </fieldset>
 
-          <div className="rij">
-            <label>Merk
-              <select value={form.merk} onChange={kiesMerk} disabled={!opties}>
-                {opties && Object.keys(opties.modellen).sort().map((m) => <option key={m}>{m}</option>)}
-              </select>
-            </label>
-            <label>Model
-              <select value={form.model} onChange={zet('model')} disabled={!opties}>
-                {modellen.map((m) => <option key={m}>{m}</option>)}
-              </select>
-            </label>
-          </div>
+          <fieldset>
+            <legend>Verkoop</legend>
+            <div className="rij">
+              <label>Moment
+                <input type="month" value={form.verkoop} onChange={zet('verkoop')} required disabled={!opties}
+                  min={opties ? plusMaanden(opties.nu, 1) : undefined}
+                  max={opties ? plusMaanden(opties.nu, 12 * opties.max_jaren) : undefined} />
+              </label>
+              <label>
+                <span>Km-stand {!kmVerkoopZelf && <em>({getal(KM_PER_JAAR)}/jaar)</em>}</span>
+                <input type="number" min={form.km} max="700000" step="1000" value={form.km_verkoop} required
+                  onChange={(e) => { setKmVerkoopZelf(true); zet('km_verkoop')(e) }} />
+              </label>
+            </div>
+            <details>
+              <summary>Inflatie meerekenen</summary>
+              <label>Per jaar (%)
+                <input type="number" min="0" max="20" step="0.5" value={form.inflatie} onChange={zet('inflatie')} />
+              </label>
+            </details>
+          </fieldset>
 
-          <div className="rij">
-            <label>Bouwjaar
-              <select value={form.bouwjaar} onChange={zet('bouwjaar')} disabled={!opties}>
-                {bouwjaren.map((j) => <option key={j}>{j}</option>)}
-              </select>
-            </label>
-            <label>Brandstof
-              <select value={form.brandstof} onChange={zet('brandstof')}>
-                {Object.entries(BRANDSTOF).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </label>
-          </div>
-
-          <div className="rij">
-            <label>Transmissie
-              <select value={form.transmissie} onChange={zet('transmissie')}>
-                {Object.entries(TRANSMISSIE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </label>
-            <label>Kilometerstand nu
-              <input type="number" min="0" max="600000" step="1000" value={form.km} onChange={zet('km')} required />
-            </label>
-          </div>
-
-          <h3>Verkoop</h3>
-          <div className="rij">
-            <label>Wanneer wil je verkopen?
-              <input type="month" value={form.verkoop} onChange={zet('verkoop')} required disabled={!opties}
-                min={opties ? plusMaanden(opties.nu, 1) : undefined}
-                max={opties ? plusMaanden(opties.nu, 12 * opties.max_jaren) : undefined} />
-            </label>
-            <label>Km-stand bij verkoop
-              <input type="number" min={form.km} max="700000" step="1000" value={form.km_verkoop} required
-                onChange={(e) => { setKmVerkoopZelf(true); zet('km_verkoop')(e) }} />
-            </label>
-          </div>
-          {!kmVerkoopZelf && <p className="hint">Km bij verkoop: uitgerekend met {getal(KM_PER_JAAR)} km per jaar.</p>}
-
-          <details>
-            <summary>Meer instellingen</summary>
-            <label>Inflatie per jaar (%)
-              <input type="number" min="0" max="20" step="0.5" value={form.inflatie} onChange={zet('inflatie')} />
-            </label>
-          </details>
-
-          <button type="submit" disabled={!opties || bezig}>{bezig ? 'Bezig…' : 'Voorspel de prijs'}</button>
+          <button type="submit" disabled={!opties || bezig}>{bezig ? 'Rekenen' : 'Bereken'}</button>
           {fout && <p className="fout">{fout}</p>}
         </form>
 
-        <section className="kaart resultaat">
+        <main className="uitkomst">
           {resultaat ? <Resultaat r={resultaat} /> : (
-            <div className="leeg">
-              <h2>Verwachte prijs</h2>
-              <p>Vul de gegevens van je auto in en klik op <b>Voorspel de prijs</b>.</p>
-            </div>
+            <p className="leeg">Kies een auto en een verkoopmoment.</p>
           )}
-        </section>
-      </main>
+        </main>
+      </div>
 
       <footer>
-        Gebaseerd op AutoScout24-advertenties (2023–2026) en de CBS-prijsindex voor tweedehands auto's.
-        Vraagprijzen, geen verkoopprijzen. Jaar 1–2 is getoetst (gemiddeld ~10–13% afwijking); jaar 3–5 is een schatting.
+        Bron: AutoScout24-advertenties 2023–2026 en CBS. Vraagprijzen, geen transactieprijzen.
+        Getoetst tot 2 jaar vooruit; verder is een schatting.
       </footer>
-    </div>
+    </>
   )
 }
 
 function Resultaat({ r }) {
   const nu = r.punten[0]
   const verkoop = r.punten[r.punten.length - 1]
-  const daling = 1 - verkoop.midden / nu.midden
+  const verlies = nu.midden - verkoop.midden
   const data = r.punten.map((x) => ({ ...x, label: maandNaam(x.datum), band: [x.laag, x.hoog] }))
+  const { merk, model, bouwjaar } = r.auto
 
   return (
     <>
-      <h2>Verwachte prijs bij verkoop</h2>
-      <div className="kerncijfers">
-        <div className="uitgelicht">
-          <span>{maandNaam(verkoop.datum)} · {getal(verkoop.km)} km</span>
-          <strong>{euro(verkoop.midden)}</strong>
-          <small>{euro(verkoop.laag)} – {euro(verkoop.hoog)}</small>
-        </div>
-        <div><span>Waarde nu</span><strong>{euro(nu.midden)}</strong></div>
-        <div><span>Waardeverlies</span><strong>{euro(nu.midden - verkoop.midden)}</strong>
-          <small>{(daling * 100).toFixed(0)}%</small></div>
-      </div>
+      <p className="auto-naam">{merk} {model}, {bouwjaar}</p>
+      <h1 className="hoofdgetal">
+        <span>Vraagprijs {maandNaam(verkoop.datum)}</span>
+        {euro(verkoop.midden)}
+      </h1>
+      <p className="marge">tussen {euro(verkoop.laag)} en {euro(verkoop.hoog)}</p>
 
-      {!r.bekend_model && <p className="waarschuwing">Dit model komt niet voor in de data; de voorspelling is minder betrouwbaar.</p>}
+      <dl className="cijfers">
+        <div><dt>Nu</dt><dd>{euro(nu.midden)}</dd></div>
+        <div><dt>Waardeverlies</dt><dd>{euro(verlies)} <small>{Math.round((verlies / nu.midden) * 100)}%</small></dd></div>
+        <div><dt>Km bij verkoop</dt><dd>{getal(verkoop.km)}</dd></div>
+      </dl>
+
+      {r.vergelijkbaar && (
+        <p className="vergelijk">
+          Nu te koop: {r.vergelijkbaar.aantal} vergelijkbare advertenties, mediaan {euro(r.vergelijkbaar.mediaan_prijs)} bij{' '}
+          {getal(r.vergelijkbaar.mediaan_km)} km.
+          {Math.abs(r.vergelijkbaar.correctie) >= 0.005 && <> Model daarop {r.vergelijkbaar.correctie > 0 ? 'opgehoogd' : 'verlaagd'} met{' '}
+            {Math.abs(Math.round(r.vergelijkbaar.correctie * 100))}%.</>}
+        </p>
+      )}
+
+      {!r.bekend_model && <p className="waarschuwing">Weinig data voor dit model; neem de uitkomst met een korrel zout.</p>}
 
       <div className="grafiek">
-        <ResponsiveContainer width="100%" height={260}>
-          <ComposedChart data={data} margin={{ top: 10, right: 16, left: 8, bottom: 0 }}>
+        <ResponsiveContainer width="100%" height={240}>
+          <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="var(--lijn)" vertical={false} />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} />
-            <YAxis tickFormatter={(v) => `€${(v / 1000).toLocaleString('nl-NL', { maximumFractionDigits: 1 })}k`} tickLine={false} axisLine={false} width={52}
-              domain={['auto', 'auto']} />
-            <Tooltip formatter={(v, naam) => (naam === 'band' ? [`${euro(v[0])} – ${euro(v[1])}`, 'Bandbreedte']
+            <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: 'var(--lijn)' }} tick={{ fill: 'var(--zacht)' }} />
+            <YAxis tickFormatter={(v) => `€${(v / 1000).toLocaleString('nl-NL', { maximumFractionDigits: 1 })}k`}
+              tickLine={false} axisLine={false} width={52} domain={['auto', 'auto']} tick={{ fill: 'var(--zacht)' }} />
+            <Tooltip formatter={(v, naam) => (naam === 'band' ? [`${euro(v[0])} – ${euro(v[1])}`, 'Marge']
               : [euro(v), 'Verwacht'])} />
-            <Area dataKey="band" stroke="none" fill="var(--accent)" fillOpacity={0.15} isAnimationActive={false} />
-            <Line dataKey="midden" stroke="var(--accent)" strokeWidth={2.5} dot={{ r: 4 }} isAnimationActive={false} />
+            <Area dataKey="band" stroke="none" fill="var(--accent)" fillOpacity={0.12} isAnimationActive={false} />
+            <Line dataKey="midden" stroke="var(--accent)" strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
 
       <table>
         <thead>
-          <tr><th>Moment</th><th>Km-stand</th><th>Laag</th><th>Verwacht</th><th>Hoog</th></tr>
+          <tr><th>Moment</th><th>Km</th><th>Laag</th><th>Verwacht</th><th>Hoog</th></tr>
         </thead>
         <tbody>
           {data.map((x) => (
             <tr key={x.datum}>
               <td>{x.maanden === 0 ? 'Nu' : x.label}</td><td>{getal(x.km)}</td><td>{euro(x.laag)}</td>
-              <td><b>{euro(x.midden)}</b></td><td>{euro(x.hoog)}</td>
+              <td>{euro(x.midden)}</td><td>{euro(x.hoog)}</td>
             </tr>
           ))}
         </tbody>
       </table>
       <p className="toelichting">
-        Bedragen in euro's van {r.euro_van}. Leeftijd nu {String(r.leeftijd).replace('.', ',')} jaar,
-        nieuwprijs {euro(r.nieuwprijs)} (afgeleid uit vergelijkbare auto's).
-        Laag/hoog: onzekerheid in de marktontwikkeling.
+        Euro&apos;s van {r.euro_van}. Uitgegaan van een nieuwprijs van {euro(r.nieuwprijs)}.
       </p>
     </>
   )
