@@ -91,6 +91,36 @@ Bij het testen zag ik dat de prijs van nu vaak wat te hoog was. Een Golf uit 202
 
 - **iCloud haalde bestanden weg.** Mijn project staat in iCloud en mijn schijf was bijna vol. Daardoor zette macOS bestanden (zoals de pakketten van de frontend en zelfs het model) alleen nog in de cloud, en de app liep vast. Oplossing: de frontend één keer bouwen en via de API serveren, zodat er nog maar één server nodig is.
 
+## Verantwoord gebruik
+
+Mensen kunnen op basis van deze app beslissen wanneer ze hun auto verkopen of wat ze ervoor vragen. Daarom heb ik nagedacht over wat de app wel en niet kan, en hoe ik dat duidelijk maak.
+
+**Eerlijk over wat het is**
+- Onder elke uitkomst staat: *"Dit is een schatting, geen taxatie. Voor goedkopere auto's onder de € 10.000 is deze voorspelling minder betrouwbaar."* Als een van de prijzen onder de € 10.000 komt, wordt die melding oranje.
+- Het model kent alleen merk, model, bouwjaar, km-stand, brandstof en transmissie. Schade, onderhoud, opties en de staat van de auto ziet het niet. Een taxateur ziet die wel.
+- Het model voorspelt **vraagprijzen** uit advertenties, geen echte verkoopprijzen. Wat je uiteindelijk krijgt, ligt vaak lager.
+
+**Laten zien hoe zeker de uitkomst is**
+- De app toont geen los getal, maar een verwachte prijs met een marge (laag tot hoog).
+- De app laat zien op hoeveel echte advertenties van vergelijkbare auto's de prijs van nu gebaseerd is, en hoeveel het model is bijgesteld.
+- Bij een model met weinig data verschijnt een waarschuwing.
+- Onderaan staat de bron (AutoScout24 en CBS), en dat het model is getoetst tot 2 jaar vooruit; verder is een schatting.
+
+**Bekende zwakke plekken** (zie ook de tabel bij Modellen)
+- Bij auto's onder € 10.000 zit maar 38% van de voorspellingen binnen 10%; bij auto's van € 20.000 tot € 40.000 is dat 55%.
+- Het model voorspelt vaker te hoog dan te laag: 58% bij 1 jaar en 70% bij 2 jaar vooruit. Wie op de app vertrouwt, kan dus te optimistisch zijn over zijn verkoopprijs.
+- De marge in de app is smaller dan de echte onzekerheid. Dat staat bij "Wat nog beter kan".
+- Populaire modellen hebben veel data en dus betere voorspellingen dan zeldzame modellen.
+
+**Verantwoord data verzamelen**
+- De scraper leest `robots.txt` en slaat pagina's over die niet toegestaan zijn.
+- Tussen verzoeken wacht hij 3 tot 6 seconden, zodat AutoScout24 niet zwaar belast wordt. Bij een blokkade (HTTP 403 of een CAPTCHA) stopt hij in plaats van het te omzeilen.
+- **Privacy:** het kenteken wordt alleen gebruikt om de nieuwprijs op te zoeken bij de open data van de RDW, en wordt **niet opgeslagen**. In de dataset staan geen kentekens, namen of andere gegevens van verkopers.
+- De data is alleen voor dit schoolproject gebruikt.
+
+**Geen gegevens van gebruikers**
+- De app slaat niets op van wat je invult. Er is geen account, er wordt niets bijgehouden en de berekening gebeurt alleen op het moment dat je op "Bereken" klikt.
+
 ## Wat nog beter kan
 
 - De marge in de app is te smal: ongeveer ±3,5%, terwijl 90% van de voorspellingen pas binnen 30% valt. Een betere manier is quantile regression: een eerlijke onder- en bovengrens per auto.

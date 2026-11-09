@@ -299,6 +299,7 @@ function Resultaat({ r }) {
         <div><dt>Km bij verkoop</dt><dd>{getal(verkoop.km)}</dd></div>
       </dl>
 
+      <Disclaimer rs={[r]} />
       <Vergelijkbaar r={r} />
       {!r.bekend_model && <p className="waarschuwing">Weinig data voor dit model; neem de uitkomst met een korrel zout.</p>}
 
@@ -321,6 +322,17 @@ function Resultaat({ r }) {
         Euro&apos;s van {r.euro_van}. Uitgegaan van een nieuwprijs van {euro(r.nieuwprijs)}.
       </p>
     </>
+  )
+}
+
+// Altijd zichtbaar; opvallender als een van de prijzen onder de € 10.000 zit, waar het model het minst goed is
+function Disclaimer({ rs }) {
+  const goedkoop = rs.some((r) => r.punten.some((p) => p.midden < 10000))
+  return (
+    <p className={goedkoop ? 'disclaimer let-op' : 'disclaimer'}>
+      <strong>Dit is een schatting, geen taxatie.</strong> Voor goedkopere auto&apos;s onder de € 10.000 is deze
+      voorspelling minder betrouwbaar.
+    </p>
   )
 }
 
@@ -371,6 +383,7 @@ function Vergelijking({ rs }) {
           : <>{verschil > 0 ? namen[0] : namen[1]} is bij verkoop {euro(Math.abs(verschil))} meer waard.</>}
       </p>
 
+      <Disclaimer rs={rs} />
       {rs.map((r, i) => <Vergelijkbaar key={i} r={r} naam={namen[i]} />)}
       {rs.some((r) => !r.bekend_model) && (
         <p className="waarschuwing">Weinig data voor een van deze modellen; neem de uitkomst met een korrel zout.</p>

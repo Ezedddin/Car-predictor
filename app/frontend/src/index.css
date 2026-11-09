@@ -104,6 +104,10 @@ details label { max-width: 50%; }
   .duo { grid-template-columns: 1fr; gap: 16px; }
   .duo-auto + .duo-auto { padding-left: 0; border-left: 0; padding-top: 16px; border-top: 1px solid var(--lijn); }
 }
+.disclaimer { margin: -8px 0 16px; padding: 9px 12px; font-size: 14px; background: var(--paneel);
+  border: 1px solid var(--lijn); border-left: 3px solid var(--zacht); border-radius: 4px; }
+.disclaimer.let-op { border-left-color: var(--waarschuwing); background: #fdf6ec; }
+.disclaimer + .vergelijk { margin-top: 0; }
 .vergelijk + .vergelijk { margin-top: -14px; }
 .vergelijk { color: var(--zacht); font-size: 14px; margin: -10px 0 20px; }
 .waarschuwing { color: var(--waarschuwing); font-size: 14px; margin: -10px 0 20px; }
