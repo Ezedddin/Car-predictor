@@ -1,0 +1,8 @@
+# Render (render.com): bouwt de Dockerfile en zet de app online bij elke push naar main
+services:
+  - type: web
+    name: auto-voorspeller
+    runtime: docker
+    plan: free
+    branch: main
+    healthCheckPath: /api/opties

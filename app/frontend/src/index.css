@@ -6,6 +6,7 @@
   --lijn: #e2dfd6;
   --accent: #0f766e;
   --accent-hover: #0b5f58;
+  --accent-2: #b45309;
   --accent-tekst: #ffffff;
   --fout: #b42318;
   --waarschuwing: #8a5300;
@@ -50,10 +51,19 @@ details { font-size: 13px; }
 summary { cursor: pointer; color: var(--zacht); margin-bottom: 10px; }
 details label { max-width: 50%; }
 
-button { width: 100%; font: inherit; font-weight: 600; height: 40px; border: 0; border-radius: 4px;
+.bereken { width: 100%; font: inherit; font-weight: 600; height: 40px; border: 0; border-radius: 4px;
   background: var(--accent); color: var(--accent-tekst); cursor: pointer; }
-button:hover:not(:disabled) { background: var(--accent-hover); }
-button:disabled { opacity: 0.55; cursor: default; }
+.bereken:hover:not(:disabled) { background: var(--accent-hover); }
+.bereken:disabled { opacity: 0.55; cursor: default; }
+
+/* Tabbladen Auto 1 / Auto 2 */
+.tabs { display: flex; gap: 4px; margin: -4px 0 16px; border-bottom: 1px solid var(--lijn); }
+.tab { font: inherit; font-size: 14px; background: none; border: 0; border-bottom: 2px solid transparent;
+  margin-bottom: -1px; padding: 6px 10px 8px; color: var(--zacht); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.tab.actief { color: var(--tekst); border-bottom-color: var(--tekst); font-weight: 600; }
+.tab:hover { color: var(--tekst); }
+.tab.toevoegen { margin-left: auto; color: var(--accent); }
+.stip { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
 .fout { color: var(--fout); font-size: 14px; margin: 10px 0 0; }
 
 /* Uitkomst */
@@ -76,6 +86,25 @@ button:disabled { opacity: 0.55; cursor: default; }
   .cijfers { flex-direction: column; }
   .cijfers div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--lijn); }
 }
+/* Twee auto's naast elkaar */
+.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 6px 0 4px; }
+.duo-auto + .duo-auto { padding-left: 24px; border-left: 1px solid var(--lijn); }
+.duo-naam { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.duo-prijs { margin: 2px 0 0; font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15;
+  font-variant-numeric: tabular-nums; }
+.duo .marge { margin: 4px 0 12px; font-size: 14px; }
+.duo-cijfers { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 14px;
+  font-variant-numeric: tabular-nums; }
+.duo-cijfers dt { color: var(--zacht); }
+.duo-cijfers dd { margin: 0; text-align: right; font-weight: 600; }
+.duo-cijfers small { font-weight: 400; color: var(--zacht); }
+.duo-verschil { margin: 16px 0 20px; padding: 10px 0; border-top: 1px solid var(--lijn); border-bottom: 1px solid var(--lijn);
+  font-weight: 600; }
+@media (max-width: 520px) {
+  .duo { grid-template-columns: 1fr; gap: 16px; }
+  .duo-auto + .duo-auto { padding-left: 0; border-left: 0; padding-top: 16px; border-top: 1px solid var(--lijn); }
+}
+.vergelijk + .vergelijk { margin-top: -14px; }
 .vergelijk { color: var(--zacht); font-size: 14px; margin: -10px 0 20px; }
 .waarschuwing { color: var(--waarschuwing); font-size: 14px; margin: -10px 0 20px; }
 

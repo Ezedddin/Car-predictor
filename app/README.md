@@ -9,8 +9,25 @@ app/
 ```
 
 De API gebruikt de bestanden die `model-building/model_training.ipynb` maakt:
-`model_catboost.cbm`, `marktfactor.csv`, `model_meta.json` (plus `cpi.csv` en `dataset_tijd.parquet`).
-Draai dat notebook dus eerst als die ontbreken.
+`model_catboost.cbm`, `marktfactor.csv`, `model_meta.json` (plus `cpi.csv`), en de opzoektabellen in
+`model-building/app_data/`. Die laatste maak je na een nieuwe dataset of een nieuw model opnieuw met:
+
+```bash
+python app/api/maak_app_data.py
+```
+
+Zo hoeft de server de hele dataset niet te laden en past hij in 512 MB geheugen.
+
+## Online zetten (Render)
+
+De `Dockerfile` in de hoofdmap bouwt de frontend en zet die samen met de API en het model in één container.
+`render.yaml` vertelt Render hoe:
+
+1. Log in op <https://render.com> met je GitHub-account.
+2. **New → Blueprint**, kies deze repo. Render leest `render.yaml` en bouwt de container (gratis plan).
+3. Na het bouwen staat de app op `https://auto-voorspeller-xxxx.onrender.com`. Elke push naar `main` zet automatisch de nieuwe versie online.
+
+Het gratis plan valt na 15 minuten zonder bezoek in slaap; het eerste bezoek daarna duurt ongeveer een minuut.
 
 ## Starten
 

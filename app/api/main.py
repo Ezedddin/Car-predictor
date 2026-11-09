@@ -4,6 +4,7 @@ Gebruikt de bestanden die model-building/model_training.ipynb maakt:
 - model_catboost.cbm  het eindmodel (prijs bij het marktniveau van nu, in euro's van 2026)
 - marktfactor.csv     laag / midden / hoog per aantal jaren vooruit (time series op de CBS-index)
 - model_meta.json     features en het tijdstip van de nieuwste data
+En de opzoektabellen in model-building/app_data/ (gemaakt door maak_app_data.py).
 
 Starten (vanuit de map app/api):
     uvicorn main:app --reload
@@ -29,37 +30,32 @@ T_NU = meta["t_nu"]
 marktfactor = pd.read_csv(MODEL_DIR / "marktfactor.csv", index_col="jaren vooruit")
 cpi = pd.read_csv(MODEL_DIR / "cpi.csv", index_col="year")["cpi_all"]
 
-data = pd.read_parquet(MODEL_DIR / "dataset_tijd.parquet",
-                       columns=["snapshot_date", "brand", "brand_model", "year", "new_price_eur",
-                                "new_price_source", "fuel_type", "transmission"])
-laatste = data["snapshot_date"].max()
+# Opzoektabellen uit de dataset, vooraf gemaakt door maak_app_data.py (zodat de server niet de hele dataset laadt)
+APP_DATA = MODEL_DIR / "app_data"
+info = json.loads((APP_DATA / "info.json").read_text())
+laatste = pd.Timestamp(info["laatste"])
 NU = laatste.year + (laatste.month - 0.5) / 12   # zelfde leeftijdsdefinitie als in dataset_tijd.ipynb
 MAX_JAREN = int(marktfactor.index.max())
-BOUWJAREN = range(int(data["year"].min()), int(data["year"].max()) + 1)
+BOUWJAREN = range(info["bouwjaar_min"], info["bouwjaar_max"] + 1)
 
 # Keuzelijsten voor de frontend: per merk de modellen, gesorteerd op hoe vaak ze voorkomen
-data["model"] = [bm[len(b) + 1:] for b, bm in zip(data["brand"], data["brand_model"])]
-MODELLEN = {merk: groep["model"].value_counts().index.tolist() for merk, groep in data.groupby("brand")}
+MODELLEN = info["modellen"]
 BRANDSTOFFEN = ["petrol", "diesel", "hybrid", "electric", "lpg", "other"]
 TRANSMISSIES = ["manual", "automatic", "other"]
+# Meest voorkomende brandstof en transmissie per model, als standaardkeuze in het formulier
+STANDAARD = info["standaard"]
 
 # Nieuwprijs uit de data: mediaan van de exacte nieuwprijzen (autoscout / RDW), van specifiek naar algemeen.
 # Dezelfde aanpak als bij de Wayback-auto's in dataset_tijd.ipynb.
-exact = data[data["new_price_source"].isin(["autoscout", "rdw_kenteken"])]
-NIEUWPRIJS = [
-    (["brand_model", "year", "fuel_type"], exact.groupby(["brand_model", "year", "fuel_type"])["new_price_eur"].median()),
-    (["brand_model", "year"], exact.groupby(["brand_model", "year"])["new_price_eur"].median()),
-    (["brand_model"], exact.groupby("brand_model")["new_price_eur"].median()),
-]
-# Meest voorkomende brandstof en transmissie per model, als standaardkeuze in het formulier
-STANDAARD = data.groupby("brand_model")[["fuel_type", "transmission"]].agg(lambda s: s.mode().iloc[0])
+NIEUWPRIJS = []
+for i in range(3):
+    tabel = pd.read_parquet(APP_DATA / f"nieuwprijs_{i}.parquet")
+    kolommen = [k for k in tabel.columns if k != "new_price_eur"]
+    NIEUWPRIJS.append((kolommen, tabel.set_index(kolommen)["new_price_eur"]))
 
 # Advertenties van nu (nieuwste AutoScout24-snapshot), om de prijs van nu te ijken aan wat er echt gevraagd wordt.
 # Per advertentie: vraagprijs gedeeld door wat het model voor precies die auto voorspelt.
-huidig = pd.read_parquet(MODEL_DIR / "dataset_tijd.parquet", filters=[("snapshot_date", "==", laatste)])
-huidig["t"] = T_NU
-huidig["geschat"] = huidig["new_price_source"].str.startswith("schatting").astype(int)
-huidig["verhouding"] = huidig["price_2026"] / np.exp(model.predict(huidig[FEATURES]))
+huidig = pd.read_parquet(APP_DATA / "huidig.parquet")
 MIN_VERGELIJKBAAR = 5
 MAX_CORRECTIE = 0.2   # het model hooguit 20% bijstellen
 
@@ -115,12 +111,8 @@ def zoek_nieuwprijs(brand_model, bouwjaar, brandstof):
 @app.get("/api/voorstel")
 def voorstel(merk: str, model: str):
     """Meest voorkomende brandstof en transmissie voor een model (standaardkeuze in het formulier)."""
-    brand_model = f"{merk} {model}"
-    standaard = STANDAARD.loc[brand_model] if brand_model in STANDAARD.index else None
-    return {
-        "brandstof": None if standaard is None else standaard["fuel_type"],
-        "transmissie": None if standaard is None else standaard["transmission"],
-    }
+    standaard = STANDAARD.get(f"{merk} {model}", {})
+    return {"brandstof": standaard.get("fuel_type"), "transmissie": standaard.get("transmission")}
 
 
 @app.post("/api/voorspel")

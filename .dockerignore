@@ -1,0 +1,9 @@
+.git
+.claude
+.DS_Store
+**/__pycache__
+**/catboost_info
+app/frontend/node_modules
+app/frontend/node_modules.nosync
+app/frontend/dist
+webscrape
