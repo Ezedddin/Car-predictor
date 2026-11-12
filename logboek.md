@@ -27,16 +27,14 @@ Ik heb ook gecontroleerd of de twee bronnen wel te vergelijken zijn. Bij vergeli
 
 ## Modellen (`model_training.ipynb`)
 
-**Eerlijk testen op de tijd:** trainen op het verleden en testen op later. Ik train op data tot juni 2024, valideer op de tweede helft van 2024 en test op 2025. Daarnaast een test van 2 jaar vooruit: trainen op 2023, testen op 2025.
+**Retrospectieve vergelijking:** training tot juni 2024, validatie in de tweede helft van 2024 en testdata uit 2025. De tweede vergelijking traint op 2023 en hergebruikt de instellingen uit de validatie van 2024. Beide vergelijkingen gebruiken imputatie en filters gebaseerd op gegevens uit 2026. De onafhankelijke historische backtest staat in `model-building/historical_validation.py`.
 
 **Deel 1, de prijs van een auto.** Drie modellen vergeleken:
 - **Baseline:** mediaanprijs per model en leeftijd. Elk echt model moet dit verslaan.
 - **Ridge-regressie:** lineair model met splines voor leeftijd en km.
 - **CatBoost** (gradient boosting met beslisbomen): de winnaar. Zes instellingen getest; de beste is diepte 10, learning rate 0,05, l2 10.
 
-De mediane fout van CatBoost:
-- **10,2%** bij 1 jaar vooruit;
-- **13,3%** bij 2 jaar vooruit.
+De oorspronkelijke retrospectieve mediane fouten waren **10,2%** (train t/m 2024) en **13,3%** (train op 2023). Deze scores meten de volledige verkoopprognose van de app niet.
 
 **Deel 2, de markt over de tijd.** Beslisbomen kunnen niet voorspellen hoe de hele markt verder beweegt. Daarvoor heb ik vier tijdreeksmodellen vergeleken op de CBS-prijsindex voor tweedehands auto's (2005–2025): random walk, random walk met drift, ARIMA(1,1,0) en **ETS met gedempte trend**. ETS won, met 2,8% fout. Het levert een marktfactor (laag, midden, hoog) per jaar vooruit.
 
@@ -104,7 +102,7 @@ Mensen kunnen op basis van deze app beslissen wanneer ze hun auto verkopen of wa
 - De app toont geen los getal, maar een verwachte prijs met een marge (laag tot hoog).
 - De app laat zien op hoeveel echte advertenties van vergelijkbare auto's de prijs van nu gebaseerd is, en hoeveel het model is bijgesteld.
 - Bij een model met weinig data verschijnt een waarschuwing.
-- Onderaan staat de bron (AutoScout24 en CBS), en dat het model is getoetst tot 2 jaar vooruit; verder is een schatting.
+- Onderaan staan de bronnen (AutoScout24 en CBS) en de toelichting dat de scenario’s toekomstige vraagprijzen schatten.
 
 **Bekende zwakke plekken** (zie ook de tabel bij Modellen)
 - Bij auto's onder € 10.000 zit maar 38% van de voorspellingen binnen 10%; bij auto's van € 20.000 tot € 40.000 is dat 55%.

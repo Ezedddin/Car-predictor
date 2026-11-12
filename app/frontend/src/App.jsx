@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { pasVoorstelToe } from './voorstel.js'
 import {
   Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
@@ -36,12 +37,12 @@ const kmBijVerkoop = (auto, maanden) => (auto.kmZelf
 
 async function api(pad, opties) {
   const res = await fetch(pad, opties)
-  const body = await res.json()
   if (!res.ok) {
-    const detail = Array.isArray(body.detail) ? body.detail.map((d) => d.msg).join(', ') : body.detail
+    const body = await res.json().catch(() => null)
+    const detail = Array.isArray(body?.detail) ? body.detail.map((d) => d.msg).join(', ') : body?.detail
     throw new Error(detail || `Fout ${res.status}`)
   }
-  return body
+  return res.json()
 }
 
 const STARTAUTO = {
@@ -58,6 +59,7 @@ export default function App() {
   const [resultaat, setResultaat] = useState(null)
   const [fout, setFout] = useState(null)
   const [bezig, setBezig] = useState(false)
+  const voorstellen = useRef([])
 
   const verkoopMaanden = opties && verkoop ? maandenTussen(opties.nu, verkoop) : 12
   const auto = autos[actief]
@@ -67,9 +69,14 @@ export default function App() {
   // Meest voorkomende brandstof en transmissie als standaard voor een gekozen model
   function stelVoor(i, merk, model) {
     const q = new URLSearchParams({ merk, model })
-    api(`/api/voorstel?${q}`).then((v) => setAutos((a) => a.map((x, j) => (j === i && x.model === model ? {
-      ...x, brandstof: v.brandstof ?? x.brandstof, transmissie: v.transmissie ?? x.transmissie,
-    } : x)))).catch(() => {})
+    const aanvraag = { handmatig: new Set() }
+    voorstellen.current[i] = aanvraag
+    api(`/api/voorstel?${q}`).then((v) => {
+      if (voorstellen.current[i] !== aanvraag) return
+      setAutos((a) => a.map((x, j) => (
+        j === i ? pasVoorstelToe(x, merk, model, v, aanvraag.handmatig) : x
+      )))
+    }).catch(() => {})
   }
 
   useEffect(() => {
@@ -80,7 +87,10 @@ export default function App() {
     }).catch(() => setFout('Geen verbinding met de server (app/api).'))
   }, [])
 
-  const zet = (veld) => (e) => wijzig(actief, { [veld]: e.target.value })
+  const zet = (veld) => (e) => {
+    voorstellen.current[actief]?.handmatig.add(veld)
+    wijzig(actief, { [veld]: e.target.value })
+  }
 
   function kiesMerk(e) {
     const merk = e.target.value
@@ -100,6 +110,7 @@ export default function App() {
   }
 
   function verwijder() {
+    delete voorstellen.current[1]
     setAutos((a) => [a[0]])
     setActief(0)
   }
@@ -194,7 +205,7 @@ export default function App() {
                 </select>
               </label>
               <label>Km-stand nu
-                <input type="number" min="0" max="600000" step="1000" value={auto.km} onChange={zet('km')} required />
+                <input type="number" min="0" max="600000" step="1" value={auto.km} onChange={zet('km')} required />
               </label>
             </div>
           </fieldset>
@@ -209,7 +220,7 @@ export default function App() {
               </label>
               <label>
                 <span>Km-stand {!auto.kmZelf && <em>({getal(KM_PER_JAAR)}/jaar)</em>}</span>
-                <input type="number" min={auto.km} max="700000" step="1000" value={kmBijVerkoop(auto, verkoopMaanden)} required
+                <input type="number" min={auto.km} max="700000" step="1" value={auto.kmZelf ? auto.km_verkoop : kmBijVerkoop(auto, verkoopMaanden)} required
                   onChange={(e) => wijzig(actief, { kmZelf: true, km_verkoop: e.target.value })} />
               </label>
             </div>
@@ -236,7 +247,7 @@ export default function App() {
 
       <footer>
         Bron: AutoScout24-advertenties 2023–2026 en CBS. Vraagprijzen, geen transactieprijzen.
-        Getoetst tot 2 jaar vooruit; verder is een schatting.
+        De scenario’s tonen een schatting van toekomstige vraagprijzen.
       </footer>
     </>
   )

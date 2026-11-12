@@ -277,6 +277,7 @@ def scrape_body_type(client, brand, slug, year, body_value, body_type, rows, url
     label = f"{brand} {year} {body_type}"
     page = 1
     total_pages = None
+    complete = True
 
     while page <= config.MAX_PAGES:
         params = dict(config.SEARCH_PARAMS, fregfrom=year, fregto=year,
@@ -284,19 +285,16 @@ def scrape_body_type(client, brand, slug, year, body_value, body_type, rows, url
         try:
             html = client.get(url, params)
             if html is None:
-                log.error("%s - page %d - overgeslagen (geen geldige response)", label, page)
-                page += 1
-                if total_pages is None:
-                    break
-                continue
+                raise ValueError("geen geldige response")
             listings, n_pages, n_results = parse_page(html)
         except (BlockedError, PermissionError):
             raise
         except Exception as exc:
             log.error("%s - page %d - fout: %s", label, page, exc)
-            page += 1
-            if total_pages is None:
+            complete = False
+            if total_pages is None or page >= total_pages:
                 break
+            page += 1
             continue
 
         if total_pages is None:
@@ -323,9 +321,16 @@ def scrape_body_type(client, brand, slug, year, body_value, body_type, rows, url
 
         log.info("%s - page %d - %d cars found", label, page, page_rows)
 
-        if not listings or page >= (total_pages or 0):
+        if not listings and page < total_pages:
+            complete = False
+        if not listings or page >= total_pages:
             break
         page += 1
+
+    if total_pages is not None and total_pages > config.MAX_PAGES:
+        log.warning("%s - paginalimiet %d van %d bereikt", label, config.MAX_PAGES, total_pages)
+        return False
+    return complete
 
 
 def parse_plate(html):
@@ -401,8 +406,10 @@ def scrape_brand_year(client, storage, brand, slug, year):
     log.info("[START] %s - %d", brand, year)
     rows = {}
     urls = {}
+    complete = True
     for body_value, body_type in config.BODY_TYPES.items():
-        scrape_body_type(client, brand, slug, year, body_value, body_type, rows, urls)
+        if not scrape_body_type(client, brand, slug, year, body_value, body_type, rows, urls):
+            complete = False
 
     if config.FETCH_MISSING_NEW_PRICE:
         fill_missing_new_prices(client, storage, brand, year, rows, urls)
@@ -410,7 +417,7 @@ def scrape_brand_year(client, storage, brand, slug, year):
     saved = storage.save(rows)
     log.info("[DONE] %s - %d - %d cars saved (%d gevonden, %d al aanwezig)",
              brand, year, saved, len(rows), len(rows) - saved)
-    return saved
+    return saved, complete
 
 
 def main():
@@ -434,7 +441,7 @@ def main():
     storage = Storage()
     client = Client()
     total = 0
-    completed = False
+    completed = True
 
     try:
         for brand, slug in brands.items():
@@ -443,14 +450,21 @@ def main():
                 if key in storage.done and not args.rescan:
                     log.info("[SKIP] %s - %d (al afgerond)", brand, year)
                     continue
-                total += scrape_brand_year(client, storage, brand, slug, year)
-                storage.mark_done(key)
-        completed = True
+                saved, complete = scrape_brand_year(client, storage, brand, slug, year)
+                total += saved
+                if complete:
+                    storage.mark_done(key)
+                else:
+                    completed = False
+                    log.warning("%s blijft open voor een volgende poging.", key)
     except BlockedError as exc:
+        completed = False
         log.error("Toegang geweigerd door AutoScout24 (%s). Scraper stopt; probeer later opnieuw.", exc)
     except PermissionError as exc:
+        completed = False
         log.error("%s. Scraper stopt.", exc)
     except KeyboardInterrupt:
+        completed = False
         log.info("Onderbroken door gebruiker.")
 
     log.info("Klaar. %d nieuwe auto's opgeslagen in %s (totaal %d listings).",

@@ -404,7 +404,8 @@ def scrape_model(client, storage, brand, model, rescan):
             countries[r["country"] or "?"] += 1
         log.info("%s %s %s - %d listings (%s), %d nieuw", brand, model, month, len(rows),
                  ", ".join(f"{c}:{n}" for c, n in sorted(countries.items())) or "-", saved)
-        storage.mark_done(f"{brand}|{model}|{month}")
+        if used:
+            storage.mark_done(f"{brand}|{model}|{month}")
 
     log.info("[DONE] %s %s - %d auto's opgeslagen", brand, model, saved_total)
     return saved_total

@@ -133,7 +133,10 @@ def voorspel(auto: Auto):
     nieuwprijs = zoek_nieuwprijs(brand_model, auto.bouwjaar, auto.brandstof)
     if nieuwprijs is None:
         raise HTTPException(422, f"Geen nieuwprijs bekend voor de {brand_model}.")
-    nieuwprijs_2026 = nieuwprijs * cpi.loc[2026] / cpi.loc[auto.bouwjaar]
+    bouwjaar_cpi = cpi.get(auto.bouwjaar)
+    if bouwjaar_cpi is None or not np.isfinite(bouwjaar_cpi) or bouwjaar_cpi <= 0:
+        raise HTTPException(422, f"Geen prijsindex beschikbaar voor bouwjaar {auto.bouwjaar}.")
+    nieuwprijs_2026 = round(nieuwprijs * cpi.loc[2026] / bouwjaar_cpi)
     leeftijd = max(NU - (auto.bouwjaar + 0.5), 0)
 
     # Punten voor de grafiek: nu, elk half jaar, en het verkoopmoment. Km loopt gelijkmatig op tot km_verkoop.
