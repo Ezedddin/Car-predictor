@@ -1,0 +1,3 @@
+-r ../app/api/requirements.txt
+-r ../webscrape/requirements.txt
+httpx
